@@ -89,19 +89,22 @@
       color: var(--text);
     }
 
-    /* 倒數計時提示 */
+    /* 倒數計時提示標籤 */
     .countdown-badge {
       display: inline-block;
       margin-top: 16px;
       padding: 6px 14px;
-      background: #eef7ee;
-      color: #248a3d;
       border-radius: 20px;
       font-size: 13px;
       font-weight: 600;
     }
 
-    .countdown-warning {
+    .badge-success {
+      background: #eef7ee;
+      color: #248a3d;
+    }
+
+    .badge-warning {
       background: #fff4e5;
       color: #b25e00;
     }
@@ -133,29 +136,9 @@
       box-sizing: border-box;
     }
 
-    .btn-primary { background: var(--primary); color: white; }
-    .btn-secondary { background: #e5e5ea; color: #1c1c1e; }
-
-    /* 首次綁定表單 */
-    .form-group {
-      text-align: left;
-      margin-bottom: 12px;
-    }
-
-    .form-group label {
-      font-size: 13px;
-      color: var(--text-sub);
-      font-weight: 500;
-    }
-
-    .form-group input {
-      width: 100%;
-      padding: 12px;
-      margin-top: 5px;
-      border: 1px solid #d1d1d6;
-      border-radius: 10px;
-      font-size: 16px;
-      box-sizing: border-box;
+    .btn-secondary {
+      background: #e5e5ea;
+      color: #1c1c1e;
     }
   </style>
 </head>
@@ -166,7 +149,7 @@
   <h2 id="title">正在驗證打卡...</h2>
   <p class="subtitle" id="subtitle">請稍候，系統正透過 NFC 紀錄位置</p>
 
-  <!-- 動態插入內容區 -->
+  <!-- 動態內容區 -->
   <div id="content-area"></div>
 </div>
 
@@ -174,7 +157,7 @@
   // Google Apps Script Web App URL
   const GAS_ENDPOINT = "https://script.google.com/macros/s/AKfycbx923BS7qMzgnT38TYfeLLtjSTGFs6Kdn1-pgYMU5TIsrC3i4vNqZr0H2nafgo_E8Gw9w/exec";
 
-  // 1. 取得或生成永久 UUID
+  // 1. 取得或生成裝置專屬 UUID
   function getDeviceUUID() {
     let uuid = localStorage.getItem('company_device_uuid');
     if (!uuid) {
@@ -195,9 +178,9 @@
   const locationId = urlParams.get('loc');
   const deviceId = getDeviceUUID();
 
-  // 2. 核心主流程
+  // 2. 核心主流程（直接感應打卡，無身分綁定步驟）
   async function init() {
-    // 若無法識別地點（缺少 loc 參數或已被重整），顯示當前 UUID，並啟動 5 秒倒數自動關閉
+    // 若無法識別地點（未帶 loc 參數或已重整）：顯示當前 UUID 並啟動 3 秒自動關閉
     if (!locationId) {
       showMissingLocationView();
       return;
@@ -207,10 +190,9 @@
       const response = await fetch(GAS_ENDPOINT, {
         method: "POST",
         body: JSON.stringify({
-          action: 'checkin',
           deviceId: deviceId,
           locationId: locationId,
-          userAgent: navigator.userAgent // 完整傳送用戶端 User-Agent
+          userAgent: navigator.userAgent
         })
       });
       const res = await response.json();
@@ -219,11 +201,9 @@
       window.history.replaceState({}, document.title, window.location.pathname);
 
       if (res.status === 'success') {
-        showSuccessView(res.name || '員工', res.location || locationId, res.time || getFormattedCurrentTime());
-      } else if (res.status === 'need_bind') {
-        showBindFormView();
+        showSuccessView(res.location || locationId, res.time || getFormattedCurrentTime());
       } else if (res.status === 'cooldown') {
-        showCooldownView(res.name, res.message);
+        showCooldownView(res.message);
       } else {
         showErrorView(res.message || '打卡未成功');
       }
@@ -234,7 +214,7 @@
 
   // --- 畫面渲染函式 ---
 
-  // 畫面 1：無法識別地點時（展示 UUID，並倒數 5 秒自動關閉）
+  // 畫面 1：無法識別地點時（展示 UUID，並啟動 3 秒自動關閉）
   function showMissingLocationView() {
     document.getElementById('icon').innerText = '⚠️';
     document.getElementById('title').innerText = '無法識別地點';
@@ -247,18 +227,18 @@
         <div class="uuid-container" id="uuid-text">${deviceId}</div>
       </div>
       <button class="btn btn-secondary" onclick="copyUUID()">📋 複製裝置 UUID</button>
-      <div class="countdown-badge countdown-warning" id="missing-timer">⏳ 視窗將在 5 秒後自動關閉</div>
+      <div class="countdown-badge badge-warning" id="missing-timer">⏳ 視窗將在 3 秒後自動關閉</div>
     `;
 
-    // 啟動 5 秒自動關閉倒數
-    startAutoCloseCountdown(5, 'missing-timer');
+    // 啟動 3 秒自動關閉倒數
+    startAutoCloseCountdown(3, 'missing-timer');
   }
 
-  // 畫面 2：打卡成功（展示當前時間、地點、姓名，並倒數 3 秒自動關閉）
-  function showSuccessView(name, location, time) {
+  // 畫面 2：打卡成功（展示當前時間、地點、裝置 ID，並啟動 3 秒自動關閉）
+  function showSuccessView(location, time) {
     document.getElementById('icon').innerText = '✅';
     document.getElementById('title').innerText = '打卡成功！';
-    document.getElementById('subtitle').innerText = `你好，${name}，已記錄你的出勤狀態`;
+    document.getElementById('subtitle').innerText = '已記錄你的出勤狀態';
 
     const contentArea = document.getElementById('content-area');
     contentArea.innerHTML = `
@@ -276,7 +256,7 @@
           <span class="info-value">${deviceId.substring(0, 12)}...</span>
         </div>
       </div>
-      <div class="countdown-badge" id="success-timer">⏳ 視窗將在 3 秒後自動關閉</div>
+      <div class="countdown-badge badge-success" id="success-timer">⏳ 視窗將在 3 秒後自動關閉</div>
       <button class="btn btn-secondary" onclick="closeWindowNow()" style="margin-top: 16px;">立即關閉分頁</button>
     `;
 
@@ -284,7 +264,7 @@
     startAutoCloseCountdown(3, 'success-timer');
   }
 
-  // 通用自動關閉倒數計時函式
+  // 通用 3 秒倒數計時函式
   function startAutoCloseCountdown(seconds, elementId) {
     let remaining = seconds;
     const timerElem = document.getElementById(elementId);
@@ -313,33 +293,10 @@
     }, 300);
   }
 
-  // 畫面 3：首次綁定表單
-  function showBindFormView() {
-    document.getElementById('icon').innerText = '📱';
-    document.getElementById('title').innerText = '首次裝置綁定';
-    document.getElementById('subtitle').innerText = '請輸入身分資訊完成此手機與工號的鎖定';
-
-    const contentArea = document.getElementById('content-area');
-    contentArea.innerHTML = `
-      <div class="form-group">
-        <label>員工工號</label>
-        <input type="text" id="bind-emp" placeholder="例如：EMP001" autocomplete="off">
-      </div>
-      <div class="form-group">
-        <label>預設 PIN 碼</label>
-        <input type="password" id="bind-pin" placeholder="請輸入 4 位密碼" maxlength="8">
-      </div>
-      <div style="font-size: 11px; color: var(--text-sub); text-align: left; margin-bottom: 10px;">
-        綁定裝置 ID：${deviceId.substring(0, 16)}...
-      </div>
-      <button class="btn btn-primary" onclick="submitBinding()">確認綁定並完成打卡</button>
-    `;
-  }
-
-  // 畫面 4：重複打卡冷卻提示
-  function showCooldownView(name, message) {
+  // 畫面 3：重複打卡冷卻提示
+  function showCooldownView(message) {
     document.getElementById('icon').innerText = 'ℹ️';
-    document.getElementById('title').innerText = '打卡已完成';
+    document.getElementById('title').innerText = '打卡提醒';
     document.getElementById('subtitle').innerText = message;
     document.getElementById('content-area').innerHTML = `
       <div class="info-box">
@@ -350,9 +307,10 @@
       </div>
       <button class="btn btn-secondary" onclick="closeWindowNow()" style="margin-top: 16px;">關閉分頁</button>
     `;
+    startAutoCloseCountdown(3, 'cooldown-timer');
   }
 
-  // 畫面 5：錯誤提示
+  // 畫面 4：錯誤提示
   function showErrorView(errMsg) {
     document.getElementById('icon').innerText = '❌';
     document.getElementById('title').innerText = '打卡失敗';
@@ -362,7 +320,7 @@
     `;
   }
 
-  // 輔助功能：複製 UUID 到剪貼簿
+  // 複製 UUID 到剪貼簿
   function copyUUID() {
     navigator.clipboard.writeText(deviceId).then(() => {
       alert("✅ 裝置 UUID 已成功複製到剪貼簿！");
@@ -374,44 +332,6 @@
       document.execCommand('copy');
       alert("✅ 裝置 UUID 已複製！");
     });
-  }
-
-  // 提交首次綁定
-  async function submitBinding() {
-    const empId = document.getElementById('bind-emp').value.trim();
-    const pin = document.getElementById('bind-pin').value.trim();
-
-    if (!empId || !pin) {
-      alert("請填寫工號及 PIN 碼");
-      return;
-    }
-
-    document.getElementById('content-area').innerHTML = '<p style="color:var(--text-sub);">正在綁定並打卡中...</p>';
-
-    try {
-      const response = await fetch(GAS_ENDPOINT, {
-        method: "POST",
-        body: JSON.stringify({
-          action: 'bind',
-          deviceId: deviceId,
-          locationId: locationId,
-          empId: empId,
-          pin: pin,
-          userAgent: navigator.userAgent // 完整傳送用戶端 User-Agent
-        })
-      });
-      const res = await response.json();
-      window.history.replaceState({}, document.title, window.location.pathname);
-
-      if (res.status === 'success') {
-        showSuccessView(res.name, res.location || locationId, res.time || getFormattedCurrentTime());
-      } else {
-        alert(res.message);
-        showBindFormView();
-      }
-    } catch (e) {
-      showErrorView('連線異常，請稍後再試');
-    }
   }
 
   window.onload = init;
