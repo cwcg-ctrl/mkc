@@ -89,6 +89,18 @@
       color: var(--text);
     }
 
+    /* 倒數計時提示 */
+    .countdown-badge {
+      display: inline-block;
+      margin-top: 16px;
+      padding: 6px 14px;
+      background: #eef7ee;
+      color: #248a3d;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
     /* UUID 專用展示方塊 */
     .uuid-container {
       background: #f2f2f7;
@@ -154,7 +166,7 @@
 </div>
 
 <script>
-  // 請替換為你的 Google Apps Script Web App URL
+  // 已更新為你的 Google Apps Script Web App URL
   const GAS_ENDPOINT = "https://script.google.com/macros/s/AKfycbx923BS7qMzgnT38TYfeLLtjSTGFs6Kdn1-pgYMU5TIsrC3i4vNqZr0H2nafgo_E8Gw9w/exec";
 
   // 1. 取得或生成永久 UUID
@@ -180,7 +192,7 @@
 
   // 2. 核心主流程
   async function init() {
-    // 【需求 1】：若無法識別地點（缺少 loc 參數或已被重整），顯示當前 UUID
+    // 若無法識別地點（缺少 loc 參數或已被重整），顯示當前 UUID
     if (!locationId) {
       showMissingLocationView();
       return;
@@ -201,7 +213,7 @@
       window.history.replaceState({}, document.title, window.location.pathname);
 
       if (res.status === 'success') {
-        // 【需求 2】：打卡成功畫面，顯示當前時間
+        // 打卡成功畫面，顯示當前時間並啟動 3 秒自動關閉
         showSuccessView(res.name || '員工', res.location || locationId, res.time || getFormattedCurrentTime());
       } else if (res.status === 'need_bind') {
         showBindFormView();
@@ -233,7 +245,7 @@
     `;
   }
 
-  // 畫面 2：打卡成功（展示當前時間、地點、姓名）
+  // 畫面 2：打卡成功（展示當前時間、地點、姓名，並倒數 3 秒自動關閉）
   function showSuccessView(name, location, time) {
     document.getElementById('icon').innerText = '✅';
     document.getElementById('title').innerText = '打卡成功！';
@@ -255,8 +267,42 @@
           <span class="info-value">${deviceId.substring(0, 12)}...</span>
         </div>
       </div>
-      <p style="font-size: 12px; color: var(--text-sub); margin-top: 14px;">已防重刷鎖定，可直接切換或關閉分頁</p>
+      <div class="countdown-badge" id="countdown-timer">⏳ 視窗將在 3 秒後自動關閉</div>
+      <button class="btn btn-secondary" onclick="closeWindowNow()" style="margin-top: 16px;">立即關閉分頁</button>
     `;
+
+    // 啟動 3 秒倒數關閉計時器
+    startAutoCloseCountdown(3);
+  }
+
+  // 自動關閉倒數邏輯
+  function startAutoCloseCountdown(seconds) {
+    let remaining = seconds;
+    const timerElem = document.getElementById('countdown-timer');
+
+    const interval = setInterval(() => {
+      remaining -= 1;
+      if (remaining > 0) {
+        if (timerElem) timerElem.innerText = `⏳ 視窗將在 ${remaining} 秒後自動關閉`;
+      } else {
+        clearInterval(interval);
+        if (timerElem) timerElem.innerText = '✅ 打卡完畢，已安全退出';
+        closeWindowNow();
+      }
+    }, 1000);
+  }
+
+  // 執行關閉分頁（相容 iOS Safari 限制機制）
+  function closeWindowNow() {
+    // 嘗試標準 JavaScript 關閉分頁動作
+    window.opener = null;
+    window.open('', '_self');
+    window.close();
+
+    // iOS Safari 安全沙盒若阻擋 window.close()，自動導向 about:blank 空白頁釋放記憶體
+    setTimeout(() => {
+      window.location.href = "about:blank";
+    }, 300);
   }
 
   // 畫面 3：首次綁定表單
@@ -294,6 +340,7 @@
           <span class="info-value">${getFormattedCurrentTime()}</span>
         </div>
       </div>
+      <button class="btn btn-secondary" onclick="closeWindowNow()" style="margin-top: 16px;">關閉分頁</button>
     `;
   }
 
@@ -312,7 +359,6 @@
     navigator.clipboard.writeText(deviceId).then(() => {
       alert("✅ 裝置 UUID 已成功複製到剪貼簿！");
     }).catch(() => {
-      // 若 Safari 阻擋 clipboard API 的備用方案
       const range = document.createRange();
       range.selectNode(document.getElementById('uuid-text'));
       window.getSelection().removeAllRanges();
